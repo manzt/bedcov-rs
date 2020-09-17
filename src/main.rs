@@ -120,6 +120,8 @@ fn parse_line(line: &str) -> Option<(&str, u32, u32)> {
 fn main() -> io::Result<()> {
     let path = env::args().nth(1).expect("Missing input file.");
     let content = fs::read_to_string(path)?;
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
 
     let mut map: HashMap<&str, IITree> = HashMap::with_capacity(24);
     for (i, line) in content.lines().enumerate() {
@@ -167,7 +169,7 @@ fn main() -> io::Result<()> {
             }
             None => (st0, en0, 0, 0),
         };
-        println!("{}\t{}\t{}\t{}\t{}", chrom, start, end, len, cov);
+        writeln!(stdout, "{}\t{}\t{}\t{}\t{}", chrom, start, end, len, cov)?;
         line.clear();
         b.clear();
         reader
