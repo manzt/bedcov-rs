@@ -7,7 +7,6 @@ struct Interval {
     st: u32,
     en: u32,
     max: u32,
-    data: u32,
 }
 
 #[derive(Debug)]
@@ -24,8 +23,8 @@ impl IITree {
         }
     }
 
-    fn add(&mut self, st: u32, en: u32, max: u32, data: u32) {
-        self.a.push(Interval { st, en, max, data })
+    fn add(&mut self, st: u32, en: u32, max: u32) {
+        self.a.push(Interval { st, en, max })
     }
 
     fn index(&mut self) -> usize {
@@ -124,10 +123,10 @@ fn main() -> io::Result<()> {
     let mut stdout = stdout.lock();
 
     let mut map: HashMap<&str, IITree> = HashMap::with_capacity(24);
-    for (i, line) in content.lines().enumerate() {
+    for line in content.lines() {
         let (chrom, start, end) = parse_line(line).expect("Failed to parse BED row.");
         let tree = map.entry(chrom).or_insert(IITree::new());
-        tree.add(start, end, end, i as u32);
+        tree.add(start, end, end);
     }
 
     for (_, tree) in map.iter_mut() {
