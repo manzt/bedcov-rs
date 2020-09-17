@@ -4,9 +4,9 @@ use std::{env, fs, io};
 
 #[derive(Debug, Clone, Copy)]
 struct Interval {
-    st: u32,
-    en: u32,
-    max: u32,
+    st: i32,
+    en: i32,
+    max: i32,
 }
 
 #[derive(Debug)]
@@ -23,7 +23,7 @@ impl IITree {
         }
     }
 
-    fn add(&mut self, st: u32, en: u32, max: u32) {
+    fn add(&mut self, st: i32, en: i32, max: i32) {
         self.a.push(Interval { st, en, max })
     }
 
@@ -72,7 +72,7 @@ impl IITree {
         k - 1
     }
 
-    fn overlap(&mut self, st: u32, en: u32, b: &mut Vec<Interval>) {
+    fn overlap(&mut self, st: i32, en: i32, b: &mut Vec<Interval>) {
         let mut h = 0;
         while 1 << h <= self.a.len() {
             h += 1;
@@ -108,7 +108,7 @@ impl IITree {
     }
 }
 
-fn parse_line(line: &str) -> Option<(&str, u32, u32)> {
+fn parse_line(line: &str) -> Option<(&str, i32, i32)> {
     let mut iter = line.trim().split("\t").take(3);
     let chrom = iter.next()?;
     let start = iter.next()?.parse().ok()?;
