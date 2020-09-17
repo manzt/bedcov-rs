@@ -12,14 +12,14 @@ struct Interval {
 #[derive(Debug)]
 struct IITree {
     a: Vec<Interval>,
-    stack: Vec<(usize, usize, usize)>,
+    stack: [(usize, usize, usize); 64],
 }
 
 impl IITree {
     fn new() -> Self {
         IITree {
             a: Vec::new(),
-            stack: Vec::with_capacity(64),
+            stack: [(0, 0, 0); 64],
         }
     }
 
@@ -28,32 +28,29 @@ impl IITree {
     }
 
     fn index(&mut self) -> usize {
-        self.a.sort_unstable_by_key(|k| k.st);
+        let ref mut a = self.a;
+        a.sort_unstable_by_key(|k| k.st);
 
-        let (mut last, mut last_i, mut i) = (0, 1, 0);
-        while i < self.a.len() {
-            last = self.a[i].en;
-            self.a[i].max = self.a[i].en;
+        let n = a.len();
+        let mut last = 0;
+        let mut last_i = 1;
+        (0..n).step_by(2).for_each(|i| {
+            last = a[i].en;
+            a[i].max = a[i].en;
             last_i = i;
-            i += 2;
-        }
+        });
 
         let mut k = 1;
-        while 1 << k <= self.a.len() {
+        while 1 << k <= a.len() {
             let step = 1 << (k + 1);
-            let mut i = (1 << k) - 1;
-            while i < self.a.len() {
-                let x = 1 << (k - 1);
-                let max = std::cmp::max(self.a[i].en, self.a[i - x].max);
-                let e = if i + x < self.a.len() {
-                    self.a[i + x].max
-                } else {
-                    last
-                };
-                let max = std::cmp::max(e, max);
-                self.a[i].max = max;
+            let i0 = (1 << k) - 1;
 
-                i += step;
+            for i in (i0..n).step_by(step) {
+                let x = 1 << (k - 1);
+                let max = std::cmp::max(a[i].en, a[i - x].max);
+                let e = if i + x < a.len() { a[i + x].max } else { last };
+                let max = std::cmp::max(e, max);
+                a[i].max = max;
             }
 
             last_i = if (last_i >> k & 1) != 0 {
@@ -62,8 +59,8 @@ impl IITree {
                 last_i + (1 << (k - 1))
             };
 
-            if last_i < self.a.len() {
-                last = std::cmp::max(last, self.a[last_i].max);
+            if last_i < a.len() {
+                last = std::cmp::max(last, a[last_i].max);
             }
 
             k += 1;
@@ -78,8 +75,11 @@ impl IITree {
             h += 1;
         }
         h -= 1;
-        self.stack.push(((1 << h) - 1, h, 0));
-        while let Some((x, h, w)) = self.stack.pop() {
+        self.stack[0] = ((1 << h) - 1, h, 0);
+        let mut t = 1;
+        while t > 0 {
+            t -= 1;
+            let (x, h, w) = self.stack[t];
             if h <= 3 {
                 let mut i = x >> h << h;
                 let mut i1 = i + (1 << (h + 1)) - 1;
@@ -93,16 +93,19 @@ impl IITree {
                     i += 1;
                 }
             } else if w == 0 {
-                self.stack.push((x, h, 1));
+                self.stack[t] = (x, h, 1);
+                t += 1;
                 let y = x - (1 << (h - 1));
                 if y >= self.a.len() || self.a[y].max > st {
-                    self.stack.push((y, h - 1, 0));
+                    self.stack[t] = (y, h - 1, 0);
                 }
+                t += 1;
             } else if x < self.a.len() && self.a[x].st < en {
                 if st < self.a[x].en {
                     b.push(self.a[x]);
                 }
-                self.stack.push((x + (1 << (h - 1)), h - 1, 0));
+                self.stack[t] = (x + (1 << (h - 1)), h - 1, 0);
+                t += 1;
             }
         }
     }
