@@ -132,9 +132,9 @@ fn main() -> io::Result<()> {
         tree.add(start, end, end);
     }
 
-    for (_, tree) in map.iter_mut() {
+    map.values_mut().for_each(|tree| {
         tree.index();
-    }
+    });
 
     let path = env::args().nth(2).expect("Missing file 2.");
     let f = fs::File::open(path)?;
