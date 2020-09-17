@@ -13,11 +13,15 @@ struct Interval {
 #[derive(Debug)]
 struct IITree {
     a: Vec<Interval>,
+    stack: Vec<(usize, usize, usize)>,
 }
 
 impl IITree {
     fn new() -> Self {
-        IITree { a: Vec::new() }
+        IITree {
+            a: Vec::new(),
+            stack: Vec::with_capacity(64),
+        }
     }
 
     fn add(&mut self, st: u32, en: u32, max: u32, data: u32) {
@@ -69,16 +73,14 @@ impl IITree {
         k - 1
     }
 
-    fn overlap(&self, st: u32, en: u32) -> Vec<Interval> {
+    fn overlap(&mut self, st: u32, en: u32, b: &mut Vec<Interval>) {
         let mut h = 0;
         while 1 << h <= self.a.len() {
             h += 1;
         }
         h -= 1;
-        let mut b: Vec<Interval> = Vec::new();
-        let mut stack: Vec<(usize, usize, usize)> = Vec::with_capacity(64);
-        stack.push(((1 << h) - 1, h, 0));
-        while let Some((x, h, w)) = stack.pop() {
+        self.stack.push(((1 << h) - 1, h, 0));
+        while let Some((x, h, w)) = self.stack.pop() {
             if h <= 3 {
                 let mut i = x >> h << h;
                 let mut i1 = i + (1 << (h + 1)) - 1;
@@ -92,19 +94,18 @@ impl IITree {
                     i += 1;
                 }
             } else if w == 0 {
-                stack.push((x, h, 1));
+                self.stack.push((x, h, 1));
                 let y = x - (1 << (h - 1));
                 if y >= self.a.len() || self.a[y].max > st {
-                    stack.push((y, h - 1, 0));
+                    self.stack.push((y, h - 1, 0));
                 }
             } else if x < self.a.len() && self.a[x].st < en {
                 if st < self.a[x].en {
                     b.push(self.a[x]);
                 }
-                stack.push((x + (1 << (h - 1)), h - 1, 0));
+                self.stack.push((x + (1 << (h - 1)), h - 1, 0));
             }
         }
-        b
     }
 }
 
@@ -136,19 +137,21 @@ fn main() -> io::Result<()> {
     let mut reader = io::BufReader::new(f);
     let mut line = String::new();
 
+    let mut b: Vec<Interval> = Vec::with_capacity(200);
+
     reader
         .read_line(&mut line)
         .expect("Failed to parse record.");
     while !line.is_empty() {
         let (chrom, st0, en0) = parse_line(&line).expect("failed to parse row.");
-        let (start, end, len, cov) = match map.get(chrom) {
+        let (start, end, len, cov) = match map.get_mut(chrom) {
             Some(tree) => {
-                let a = tree.overlap(st0, en0);
+                tree.overlap(st0, en0, &mut b);
                 let mut cov_st = 0;
                 let mut cov_en = 0;
                 let mut cov = 0;
 
-                for m in &a {
+                for m in &b {
                     let st1 = std::cmp::max(st0, m.st);
                     let en1 = std::cmp::min(en0, m.en);
                     if st1 > cov_en {
@@ -160,12 +163,13 @@ fn main() -> io::Result<()> {
                     }
                 }
                 cov += cov_en - cov_st;
-                (st0, en0, a.len(), cov)
+                (st0, en0, b.len(), cov)
             }
             None => (st0, en0, 0, 0),
         };
         println!("{}\t{}\t{}\t{}\t{}", chrom, start, end, len, cov);
         line.clear();
+        b.clear();
         reader
             .read_line(&mut line)
             .expect("Failed to parse record.");
