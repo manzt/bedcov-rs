@@ -1,8 +1,9 @@
+use linereader::LineReader;
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::{env, fs, io};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 struct Interval {
     st: i32,
     en: i32,
@@ -27,7 +28,7 @@ impl IITree {
         self.a.push(Interval { st, en, max })
     }
 
-    fn index(&mut self) -> usize {
+    fn index(&mut self) {
         let ref mut a = self.a;
         a.sort_unstable_by_key(|k| k.st);
 
@@ -65,16 +66,33 @@ impl IITree {
 
             k += 1;
         }
-
-        k - 1
     }
 
-    fn overlap(&mut self, st: i32, en: i32, b: &mut Vec<Interval>) {
+    fn overlap(&mut self, st: i32, en: i32) -> (i32, i32, i32, i32) {
+        let mut cov_st = 0;
+        let mut cov_en = 0;
+        let mut cov = 0;
+        let mut b = 0;
+
+        let mut calc = |i: &Interval| {
+            let st1 = std::cmp::max(st, i.st);
+            let en1 = std::cmp::min(en, i.en);
+            if st1 > cov_en {
+                cov += cov_en - cov_st;
+                cov_st = st1;
+                cov_en = en1;
+            } else {
+                cov_en = std::cmp::max(cov_en, en1);
+            }
+            b += 1;
+        };
+
         let mut h = 0;
         while 1 << h <= self.a.len() {
             h += 1;
         }
         h -= 1;
+
         self.stack[0] = ((1 << h) - 1, h, 0);
         let mut t = 1;
         while t > 0 {
@@ -88,7 +106,7 @@ impl IITree {
                 }
                 while i < i1 && self.a[i].st < en {
                     if st < self.a[i].en {
-                        b.push(self.a[i]);
+                        calc(&self.a[i])
                     }
                     i += 1;
                 }
@@ -102,16 +120,20 @@ impl IITree {
                 t += 1;
             } else if x < self.a.len() && self.a[x].st < en {
                 if st < self.a[x].en {
-                    b.push(self.a[x]);
+                    calc(&self.a[x])
                 }
                 self.stack[t] = (x + (1 << (h - 1)), h - 1, 0);
                 t += 1;
             }
         }
+        cov += cov_en - cov_st;
+        (st, en, b, cov)
     }
 }
 
-fn parse_line(line: &str) -> Option<(&str, i32, i32)> {
+#[inline]
+fn parse_line(line: &[u8]) -> Option<(&str, i32, i32)> {
+    let line = std::str::from_utf8(line).ok()?;
     let mut iter = line.trim().split("\t").take(3);
     let chrom = iter.next()?;
     let start = iter.next()?.parse().ok()?;
@@ -121,62 +143,40 @@ fn parse_line(line: &str) -> Option<(&str, i32, i32)> {
 
 fn main() -> io::Result<()> {
     let path = env::args().nth(1).expect("Missing input file.");
-    let content = fs::read_to_string(path)?;
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
+    let f = fs::File::open(path)?;
+    let mut reader = LineReader::new(f);
 
-    let mut map: HashMap<&str, IITree> = HashMap::with_capacity(24);
-    for line in content.lines() {
-        let (chrom, start, end) = parse_line(line).expect("Failed to parse BED row.");
-        let tree = map.entry(chrom).or_insert(IITree::new());
-        tree.add(start, end, end);
+    let mut map: HashMap<String, IITree> = HashMap::with_capacity(24);
+    while let Some(line) = reader.next_line() {
+        let line = line.expect("Read error.");
+        let (chrom, start, end) = parse_line(&line).expect("Failed to parse BED row.");
+        match map.get_mut(chrom) {
+            Some(tree) => tree.add(start, end, end),
+            None => {
+                let mut tree = IITree::new();
+                tree.add(start, end, end);
+                map.insert(chrom.to_string(), tree);
+            }
+        }
     }
 
-    map.values_mut().for_each(|tree| {
-        tree.index();
-    });
+    map.values_mut().for_each(|tree| tree.index());
 
     let path = env::args().nth(2).expect("Missing file 2.");
     let f = fs::File::open(path)?;
-    let mut reader = io::BufReader::new(f);
-    let mut line = String::new();
+    let mut reader = LineReader::new(f);
 
-    let mut b: Vec<Interval> = Vec::with_capacity(200);
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
 
-    reader
-        .read_line(&mut line)
-        .expect("Failed to parse record.");
-    while !line.is_empty() {
+    while let Some(line) = reader.next_line() {
+        let line = line.expect("Read error.");
         let (chrom, st0, en0) = parse_line(&line).expect("failed to parse row.");
         let (start, end, len, cov) = match map.get_mut(chrom) {
-            Some(tree) => {
-                tree.overlap(st0, en0, &mut b);
-                let mut cov_st = 0;
-                let mut cov_en = 0;
-                let mut cov = 0;
-
-                for m in &b {
-                    let st1 = std::cmp::max(st0, m.st);
-                    let en1 = std::cmp::min(en0, m.en);
-                    if st1 > cov_en {
-                        cov += cov_en - cov_st;
-                        cov_st = st1;
-                        cov_en = en1;
-                    } else {
-                        cov_en = std::cmp::max(cov_en, en1);
-                    }
-                }
-                cov += cov_en - cov_st;
-                (st0, en0, b.len(), cov)
-            }
+            Some(tree) => tree.overlap(st0, en0),
             None => (st0, en0, 0, 0),
         };
         writeln!(stdout, "{}\t{}\t{}\t{}\t{}", chrom, start, end, len, cov)?;
-        line.clear();
-        b.clear();
-        reader
-            .read_line(&mut line)
-            .expect("Failed to parse record.");
     }
 
     Ok(())
