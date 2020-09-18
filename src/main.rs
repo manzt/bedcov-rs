@@ -1,7 +1,8 @@
-use linereader::LineReader;
 use std::collections::HashMap;
 use std::io::prelude::*;
 use std::{env, fs, io};
+
+use csv;
 
 #[derive(Debug)]
 struct Interval {
@@ -132,24 +133,27 @@ impl IITree {
 }
 
 #[inline]
-fn parse_line(line: &[u8]) -> Option<(&str, i32, i32)> {
-    let line = std::str::from_utf8(line).ok()?;
-    let mut iter = line.trim().split("\t").take(3);
-    let chrom = iter.next()?;
-    let start = iter.next()?.parse().ok()?;
-    let end = iter.next()?.parse().ok()?;
+fn parse_line(record: &csv::ByteRecord) -> Option<(&str, i32, i32)> {
+    let mut row_iter = record
+        .iter()
+        .map(|b| std::str::from_utf8(b).expect("Failed to parse UTF-8"));
+    let chrom = row_iter.next()?;
+    let start = row_iter.next()?.parse().ok()?;
+    let end = row_iter.next()?.parse().ok()?;
     Some((chrom, start, end))
 }
 
 fn main() -> io::Result<()> {
     let path = env::args().nth(1).expect("Missing input file.");
-    let f = fs::File::open(path)?;
-    let mut reader = LineReader::new(f);
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .delimiter(b'\t')
+        .from_path(path)?;
+    let mut record = csv::ByteRecord::new();
 
     let mut map: HashMap<String, IITree> = HashMap::with_capacity(24);
-    while let Some(line) = reader.next_line() {
-        let line = line.expect("Read error.");
-        let (chrom, start, end) = parse_line(&line).expect("Failed to parse BED row.");
+    while reader.read_byte_record(&mut record)? {
+        let (chrom, start, end) = parse_line(&record).expect("Failed to parse BED row.");
         match map.get_mut(chrom) {
             Some(tree) => tree.add(start, end, end),
             None => {
@@ -163,15 +167,16 @@ fn main() -> io::Result<()> {
     map.values_mut().for_each(|tree| tree.index());
 
     let path = env::args().nth(2).expect("Missing file 2.");
-    let f = fs::File::open(path)?;
-    let mut reader = LineReader::new(f);
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .delimiter(b'\t')
+        .from_path(path)?;
 
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
 
-    while let Some(line) = reader.next_line() {
-        let line = line.expect("Read error.");
-        let (chrom, st0, en0) = parse_line(&line).expect("failed to parse row.");
+    while reader.read_byte_record(&mut record)? {
+        let (chrom, st0, en0) = parse_line(&record).expect("failed to parse row.");
         let (start, end, len, cov) = match map.get_mut(chrom) {
             Some(tree) => tree.overlap(st0, en0),
             None => (st0, en0, 0, 0),
