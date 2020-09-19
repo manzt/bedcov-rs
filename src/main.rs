@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::prelude::*;
-use std::{env, fs, io};
+use std::{env, io};
 
 use csv;
 
@@ -43,22 +43,21 @@ impl IITree {
         });
 
         let mut k = 1;
-        while 1 << k <= a.len() {
-            let step = 1 << (k + 1);
-            let i0 = (1 << k) - 1;
-
+        while (1 << k) <= n {
+            let x = 1 << (k - 1);
+            let i0 = (x << 1) - 1;
+            let step = x << 2;
             for i in (i0..n).step_by(step) {
-                let x = 1 << (k - 1);
                 let max = std::cmp::max(a[i].en, a[i - x].max);
-                let e = if i + x < a.len() { a[i + x].max } else { last };
+                let e = if i + x < n { a[i + x].max } else { last };
                 let max = std::cmp::max(e, max);
                 a[i].max = max;
             }
 
-            last_i = if (last_i >> k & 1) != 0 {
-                last_i - (1 << (k - 1))
+            last_i = if (last_i >> k & 1) > 0 {
+                last_i - x
             } else {
-                last_i + (1 << (k - 1))
+                last_i + x
             };
 
             if last_i < a.len() {
