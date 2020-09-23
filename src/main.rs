@@ -14,14 +14,14 @@ struct Interval {
 #[derive(Debug)]
 struct IITree {
     a: Vec<Interval>,
-    stack: [(usize, usize, usize); 64],
+    stack: [(usize, usize, bool); 64],
 }
 
 impl IITree {
     fn new() -> Self {
         IITree {
             a: Vec::new(),
-            stack: [(0, 0, 0); 64],
+            stack: [(0, 0, false); 64],
         }
     }
 
@@ -93,7 +93,7 @@ impl IITree {
         }
         h -= 1;
 
-        self.stack[0] = ((1 << h) - 1, h, 0);
+        self.stack[0] = ((1 << h) - 1, h, false);
         let mut t = 1;
         while t > 0 {
             t -= 1;
@@ -110,19 +110,19 @@ impl IITree {
                     }
                     i += 1;
                 }
-            } else if w == 0 {
-                self.stack[t] = (x, h, 1);
+            } else if !w {
+                self.stack[t] = (x, h, true);
                 t += 1;
                 let y = x - (1 << (h - 1));
                 if y >= self.a.len() || self.a[y].max > st {
-                    self.stack[t] = (y, h - 1, 0);
+                    self.stack[t] = (y, h - 1, false);
                 }
                 t += 1;
             } else if x < self.a.len() && self.a[x].st < en {
                 if st < self.a[x].en {
                     calc(&self.a[x])
                 }
-                self.stack[t] = (x + (1 << (h - 1)), h - 1, 0);
+                self.stack[t] = (x + (1 << (h - 1)), h - 1, false);
                 t += 1;
             }
         }
